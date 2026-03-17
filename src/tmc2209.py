@@ -1,3 +1,4 @@
+import logging
 from typing import Type, TypeVar
 
 from registers import (
@@ -9,6 +10,8 @@ from registers import (
 from conf import BaseConf, MotionConf
 from uart import UARTBus
 
+log = logging.getLogger(__name__)
+
 T = TypeVar("T")
 
 
@@ -18,26 +21,32 @@ class TMC2209:
     def __init__(self, bus: UARTBus, addr: int = 0):
         self._bus  = bus
         self._addr = addr
-        self.base   = BaseConf()   # mirrored; use push_base/pull_base to sync
-        self.motion = MotionConf() # mirrored; use push_motion/pull_motion to sync
-        self._vactual: int = 0     # last written velocity (µsteps/t)
+        self.base   = BaseConf()
+        self.motion = MotionConf()
+        self._vactual: int = 0
+        log.debug("TMC2209 created  addr=%d", addr)
 
     # ── Low-level ──────────────────────────────────────────────────────────────
 
     def write_register(self, reg) -> None:
-        datagram = build_write_datagram(self._addr, reg.ADDRESS, reg.to_raw())
+        raw = reg.to_raw()
+        log.debug("write  %-12s addr=0x%02X  raw=0x%08X", type(reg).__name__, int(reg.ADDRESS), raw)
+        datagram = build_write_datagram(self._addr, reg.ADDRESS, raw)
         self._bus.send_write_datagram(datagram)
 
     def read_register(self, reg_cls: Type[T]) -> T:
+        log.debug("read   %-12s addr=0x%02X", reg_cls.__name__, int(reg_cls.ADDRESS))
         request = build_read_request_datagram(self._addr, reg_cls.ADDRESS)
         reply   = ReadReplyDatagram.parse(self._bus.send_read_request(request))
-        return reg_cls.from_raw(reply.data)
+        result  = reg_cls.from_raw(reply.data)
+        log.debug("       %-12s raw=0x%08X  →  %s", reg_cls.__name__, reply.data, result)
+        return result
 
     # ── Cached conf groups ─────────────────────────────────────────────────────
 
     def push_base(self) -> None:
         """Write all BaseConf registers to the device."""
-        # GCONF first: sets UART/chopper mode before chopconf/pwmconf
+        log.info("push_base")
         self.write_register(self.base.gconf)
         self.write_register(self.base.slaveconf)
         self.write_register(self.base.factory_conf)
@@ -47,6 +56,7 @@ class TMC2209:
 
     def pull_base(self) -> None:
         """Read all BaseConf registers from the device into self.base."""
+        log.info("pull_base")
         from registers import GCONF, SLAVECONF, FACTORY_CONF, TPOWERDOWN, CHOPCONF, PWMCONF
         self.base.gconf        = self.read_register(GCONF)
         self.base.slaveconf    = self.read_register(SLAVECONF)
@@ -57,6 +67,7 @@ class TMC2209:
 
     def push_motion(self) -> None:
         """Write all MotionConf registers to the device."""
+        log.info("push_motion")
         self.write_register(self.motion.ihold_irun)
         self.write_register(self.motion.tpwmthrs)
         self.write_register(self.motion.tcoolthrs)
@@ -65,6 +76,7 @@ class TMC2209:
 
     def pull_motion(self) -> None:
         """Read all MotionConf registers from the device into self.motion."""
+        log.info("pull_motion")
         from registers import IHOLD_IRUN, TPWMTHRS, TCOOLTHRS, SGTHRS, COOLCONF
         self.motion.ihold_irun = self.read_register(IHOLD_IRUN)
         self.motion.tpwmthrs   = self.read_register(TPWMTHRS)
@@ -87,6 +99,7 @@ class TMC2209:
 
     def set_velocity(self, v: int) -> None:
         """Write VACTUAL immediately. Negative = reverse. 0 = revert to STEP pin."""
+        log.info("set_velocity  v=%d", v)
         self._vactual = v
         self.write_register(VACTUAL(vactual=v))
 

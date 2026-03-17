@@ -9,6 +9,7 @@ import argparse
 import dataclasses
 from datetime import datetime
 from enum import IntEnum
+import logging
 from pathlib import Path
 
 from registers import (
@@ -160,11 +161,17 @@ def snapshot_to_markdown(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Probe a TMC2209 and write a Markdown report.")
-    parser.add_argument("--port", required=True,  help="Serial port (e.g. /dev/ttyUSB0)")
-    parser.add_argument("--baud", type=int, default=115200, help="Baud rate (default: 115200)")
-    parser.add_argument("--addr", type=int, default=0,      help="Slave address 0-3 (default: 0)")
-    parser.add_argument("--out",  default=None,             help="Output file (default: probe_<timestamp>.md)")
+    parser.add_argument("--port",  required=True,           help="Serial port (e.g. /dev/ttyUSB0)")
+    parser.add_argument("--baud",  type=int, default=115200, help="Baud rate (default: 115200)")
+    parser.add_argument("--addr",  type=int, default=0,     help="Slave address 0-3 (default: 0)")
+    parser.add_argument("--out",   default=None,            help="Output file (default: probe_<timestamp>.md)")
+    parser.add_argument("--debug", action="store_true",     help="Print raw UART bytes and register values")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(levelname)-8s %(name)s: %(message)s",
+    )
 
     now     = datetime.now()
     outfile = Path(args.out) if args.out else Path(f"probe_{now.strftime('%Y%m%d_%H%M%S')}.md")
