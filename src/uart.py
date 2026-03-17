@@ -37,6 +37,7 @@ class UARTBus:
         """Send a 4-byte read request, discard the echo, and return the 8-byte reply."""
         if len(request) != 4:
             raise ValueError(f"Read request must be 4 bytes, got {len(request)}")
+        self._serial.reset_input_buffer()
         self._serial.write(request)
         echo = self._serial.read(4)
         if len(echo) != 4:
