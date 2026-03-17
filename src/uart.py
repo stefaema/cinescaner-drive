@@ -34,15 +34,16 @@ class UARTBus:
             raise UARTError(f"Incomplete echo: expected 8 bytes, got {len(echo)}")
 
     def send_read_request(self, request: bytes) -> bytes:
-        """Send a 4-byte read request, discard the echo, and return the 8-byte reply."""
+        """Send a 4-byte read request, discard the echo, and return the 8-byte reply.
+
+        Echo and reply are read in a single call so the OS does not schedule
+        a second read before the driver has started transmitting its response.
+        """
         if len(request) != 4:
             raise ValueError(f"Read request must be 4 bytes, got {len(request)}")
         self._serial.reset_input_buffer()
         self._serial.write(request)
-        echo = self._serial.read(4)
-        if len(echo) != 4:
-            raise UARTError(f"Incomplete echo: expected 4 bytes, got {len(echo)}")
-        reply = self._serial.read(8)
-        if len(reply) != 8:
-            raise UARTError(f"Incomplete reply: expected 8 bytes, got {len(reply)}")
-        return reply
+        frame = self._serial.read(12)   # 4-byte echo + 8-byte reply
+        if len(frame) != 12:
+            raise UARTError(f"Incomplete frame: expected 12 bytes, got {len(frame)}")
+        return frame[4:]                # strip echo, return reply
